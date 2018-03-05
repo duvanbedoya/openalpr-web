@@ -19,6 +19,10 @@
 
 #include "postprocess.h"
 
+#include <fstream>
+#include <queue>
+#include <utility>
+
 using namespace std;
 
 namespace alpr
@@ -28,6 +32,9 @@ namespace alpr
   {
     this->config = config;
 
+    this->min_confidence = 0;
+    this->skip_level = 0;
+    
     stringstream filename;
     filename << config->getPostProcessRuntimeDir() << "/" << config->country << ".patterns";
 
@@ -53,9 +60,6 @@ namespace alpr
       }
     }
 
-    //vector<RegexRule> test = rules["base"];
-    //for (int i = 0; i < test.size(); i++)
-    //  cout << "Rule: " << test[i].regex << endl;
   }
 
   PostProcess::~PostProcess()
@@ -71,18 +75,24 @@ namespace alpr
       }
     }
   }
+  
+  void PostProcess::setConfidenceThreshold(float min_confidence, float skip_level) {
+    this->min_confidence = min_confidence;
+    this->skip_level = skip_level;
+  }
 
-  void PostProcess::addLetter(string letter, int charposition, float score)
+
+  void PostProcess::addLetter(string letter, int line_index, int charposition, float score)
   {
-    if (score < config->postProcessMinConfidence)
+    if (score < min_confidence)
       return;
 
-    insertLetter(letter, charposition, score);
+    insertLetter(letter, line_index, charposition, score);
 
-    if (score < config->postProcessConfidenceSkipLevel)
+    if (score < skip_level)
     {
-      float adjustedScore = abs(config->postProcessConfidenceSkipLevel - score) + config->postProcessMinConfidence;
-      insertLetter(SKIP_CHAR, charposition, adjustedScore );
+      float adjustedScore = abs(skip_level - score) + min_confidence;
+      insertLetter(SKIP_CHAR, line_index, charposition, adjustedScore );
     }
 
     //if (letter == '0')
@@ -91,9 +101,9 @@ namespace alpr
     //}
   }
 
-  void PostProcess::insertLetter(string letter, int charposition, float score)
+  void PostProcess::insertLetter(string letter, int line_index, int charposition, float score)
   {
-    score = score - config->postProcessMinConfidence;
+    score = score - min_confidence;
 
     int existingIndex = -1;
     if (letters.size() < charposition + 1)
@@ -108,6 +118,7 @@ namespace alpr
     for (int i = 0; i < letters[charposition].size(); i++)
     {
       if (letters[charposition][i].letter == letter &&
+          letters[charposition][i].line_index == line_index &&
           letters[charposition][i].charposition == charposition)
       {
         existingIndex = i;
@@ -118,15 +129,16 @@ namespace alpr
     if (existingIndex == -1)
     {
       Letter newLetter;
+      newLetter.line_index = line_index;
       newLetter.charposition = charposition;
       newLetter.letter = letter;
-      newLetter.occurences = 1;
+      newLetter.occurrences = 1;
       newLetter.totalscore = score;
       letters[charposition].push_back(newLetter);
     }
     else
     {
-      letters[charposition][existingIndex].occurences = letters[charposition][existingIndex].occurences + 1;
+      letters[charposition][existingIndex].occurrences = letters[charposition][existingIndex].occurrences + 1;
       letters[charposition][existingIndex].totalscore = letters[charposition][existingIndex].totalscore + score;
     }
   }
@@ -179,7 +191,7 @@ namespace alpr
       for (int i = 0; i < letters.size(); i++)
       {
         for (int j = 0; j < letters[i].size(); j++)
-          cout << "PostProcess Letter: " << letters[i][j].charposition << " " << letters[i][j].letter << " -- score: " << letters[i][j].totalscore << " -- occurences: " << letters[i][j].occurences << endl;
+          cout << "PostProcess Line " << letters[i][j].line_index << " Letter: " << letters[i][j].charposition << " " << letters[i][j].letter << " -- score: " << letters[i][j].totalscore << " -- occurrences: " << letters[i][j].occurrences << endl;
       }
     }
 
@@ -258,7 +270,7 @@ namespace alpr
     {
       if (letters[i].size() > 0)
       {
-        totalScore += (letters[i][0].totalscore / letters[i][0].occurences) + config->postProcessMinConfidence;
+        totalScore += (letters[i][0].totalscore / letters[i][0].occurrences) + min_confidence;
         numScores++;
       }
     }
@@ -308,7 +320,7 @@ namespace alpr
         consecutiveNonMatches += 1;
       permutations.pop();
 
-      if (allPossibilities.size() >= topn || consecutiveNonMatches >= 10)
+      if (allPossibilities.size() >= topn || consecutiveNonMatches >= (topn*2))
         break;
 
       // add child permutations to queue
@@ -340,6 +352,7 @@ namespace alpr
     possibility.matchesTemplate = false;
     int plate_char_length = 0;
 
+    int last_line = 0;
     for (int i = 0; i < letters.size(); i++)
     {
       if (letters[i].size() == 0)
@@ -347,6 +360,13 @@ namespace alpr
 
       Letter letter = letters[i][letterIndices[i]];
 
+      // Add a "\n" on new lines
+      if (letter.line_index != last_line)
+      {
+        possibility.letters = possibility.letters + "\n";
+      }
+      last_line = letter.line_index;
+      
       if (letter.letter != SKIP_CHAR)
       {
         possibility.letters = possibility.letters + letter.letter;
@@ -371,7 +391,6 @@ namespace alpr
         possibility.matchesTemplate = regionRules[i]->match(possibility.letters);
         if (possibility.matchesTemplate)
         {
-          possibility.letters = regionRules[i]->filterSkips(possibility.letters);
           break;
         }
       }
@@ -381,11 +400,27 @@ namespace alpr
     if (allPossibilitiesLetters.end() != allPossibilitiesLetters.find(possibility.letters))
       return false;
 
-    allPossibilities.push_back(possibility);
-    allPossibilitiesLetters.insert(possibility.letters);
-    return true;
+    // If mustMatchPattern is toggled in the config and a template is provided, 
+    // only include this result if there is a pattern match
+    if (!config->mustMatchPattern || templateregion.size() == 0 || 
+        (config->mustMatchPattern && possibility.matchesTemplate))
+    {
+      allPossibilities.push_back(possibility);
+      allPossibilitiesLetters.insert(possibility.letters);
+      return true;
+    }
+    
+    return false;
   }
 
+  std::vector<string> PostProcess::getPatterns() {
+    vector<string> v;
+    for(map<string,std::vector<RegexRule*> >::iterator it = rules.begin(); it != rules.end(); ++it) {
+      v.push_back(it->first);
+    }
+    
+    return v;
+  }
 
   bool letterCompare( const Letter &left, const Letter &right )
   {

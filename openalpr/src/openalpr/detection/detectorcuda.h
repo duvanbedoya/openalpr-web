@@ -21,8 +21,6 @@
 #define	OPENALPR_DETECTORCUDA_H
 
 
-#include <stdio.h>
-#include <iostream>
 #include <vector>
 
 #ifdef COMPILE_GPU
@@ -31,7 +29,11 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/core/core.hpp"
 #include "opencv2/ml/ml.hpp"
+#if OPENCV_MAJOR_VERSION == 2
 #include "opencv2/gpu/gpu.hpp"
+#else
+#include "opencv2/cudaobjdetect.hpp"
+#endif
 
 #include "detector.h"
 #include "detectorcpu.h"
@@ -43,16 +45,18 @@ namespace alpr
 
   class DetectorCUDA : public Detector {
   public:
-      DetectorCUDA(Config* config);
+      DetectorCUDA(Config* config, PreWarp* prewarp);
       virtual ~DetectorCUDA();
 
-      std::vector<PlateRegion> detect(cv::Mat frame, std::vector<cv::Rect> regionsOfInterest);
+      std::vector<cv::Rect> find_plates(cv::Mat frame, cv::Size min_plate_size, cv::Size max_plate_size);
 
   private:
 
+#if OPENCV_MAJOR_VERSION == 2
       cv::gpu::CascadeClassifier_GPU cuda_cascade;
-
-      std::vector<PlateRegion> doCascade(cv::Mat frame, int offset_x, int offset_y);
+#else
+      cv::Ptr<cv::cuda::CascadeClassifier> cuda_cascade;
+#endif
   };
 
 }

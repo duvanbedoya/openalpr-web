@@ -29,6 +29,10 @@ openalpr-*.asc
 openalpr-*.sig
 openalpr-*.tar.gz
 *.orig
+.DS_Store
+
+# vim editor files
+*.swp
 
 # Visual Studio files
 src.sln
@@ -41,6 +45,9 @@ src.sln
 *.ipch
 Debug/
 Release/
+
+# JetBrains IDEA / PyCharm
+.idea/
 
 
 cmake_install.cmake

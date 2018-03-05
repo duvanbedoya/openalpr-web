@@ -1,7 +1,7 @@
 openalpr
 ========
 
-OpenALPR is an open source *Automatic License Plate Recognition* library written in C++ with bindings in C#, Java, Node.js, and Python.  The library analyzes images and video streams to identify license plates.  The output is the text representation of any license plate characters.
+OpenALPR is an open source *Automatic License Plate Recognition* library written in C++ with bindings in C#, Java, Node.js, Go, and Python.  The library analyzes images and video streams to identify license plates.  The output is the text representation of any license plate characters.
 
 Check out a live online demo here: http://www.openalpr.com/demo-image.html
 
@@ -58,7 +58,7 @@ Where:
      Max number of possible plate numbers to return.  Default=10
 
    --seek <integer_ms>
-     Seek to the specied millisecond in a video file. Default=0
+     Seek to the specified millisecond in a video file. Default=0
 
    -p <pattern code>,  --pattern <pattern code>
      Attempt to match the plate number against a plate pattern (e.g., md
@@ -96,19 +96,21 @@ Where:
 Binaries
 ----------
 
-Pre-compiled Windows binaries can be downloaded on the [releases page] (https://github.com/openalpr/openalpr/releases)
+Pre-compiled Windows binaries can be downloaded on the [releases page](https://github.com/openalpr/openalpr/releases)
 
-Install OpenALPR on Ubuntu 14.04 x64 with the following commands:
+Install OpenALPR on Ubuntu 16.04 with the following commands:
 
-    wget -O - http://deb.openalpr.com/openalpr.gpg.key | sudo apt-key add -
-    echo "deb http://deb.openalpr.com/master/ openalpr main" | sudo tee /etc/apt/sources.list.d/openalpr.list
-    sudo apt-get update
-    sudo apt-get install openalpr openalpr-daemon openalpr-utils libopenalpr-dev
+    sudo apt-get update && sudo apt-get install -y openalpr openalpr-daemon openalpr-utils libopenalpr-dev
+
+Documentation
+---------------
+
+Detailed documentation is available at [doc.openalpr.com](http://doc.openalpr.com/)
 
 Integrating the Library
 -----------------------
 
-OpenALPR is written in C++ and has bindings in C#, Python, Node.js, and Java.  Please see this guide for examples showing how to run OpenALPR in your application: https://github.com/openalpr/openalpr/wiki/Integrating-OpenALPR
+OpenALPR is written in C++ and has bindings in C#, Python, Node.js, Go, and Java.  Please see this guide for examples showing how to run OpenALPR in your application: http://doc.openalpr.com/bindings.html
 
 Compiling
 -----------
@@ -119,18 +121,21 @@ OpenALPR compiles and runs on Linux, Mac OSX and Windows.
 
 OpenALPR requires the following additional libraries:
 
-    - Tesseract OCR v3.0.3 (https://code.google.com/p/tesseract-ocr/)
+    - Tesseract OCR v3.0.4 (https://github.com/tesseract-ocr/tesseract)
     - OpenCV v2.4.8+ (http://opencv.org/)
 
 After cloning this GitHub repository, you should download and extract Tesseract and OpenCV source code into their own directories.  Compile both libraries.
 
 Please follow these detailed compilation guides for your respective operating system:
 
-* [Windows] (https://github.com/openalpr/openalpr/wiki/Compilation-instructions-(Windows))
-* [Ubuntu Linux] (https://github.com/openalpr/openalpr/wiki/Compilation-instructions-(Ubuntu-Linux))
-* [OS X] (https://github.com/openalpr/openalpr/wiki/Compilation-instructions-(OS-X))
-* [Android] (https://github.com/sujaybhowmick/OpenAlprDroidApp)
-* [iOS] (https://github.com/twelve17/openalpr-ios)
+* [Windows](https://github.com/openalpr/openalpr/wiki/Compilation-instructions-(Windows))
+* [Ubuntu Linux](https://github.com/openalpr/openalpr/wiki/Compilation-instructions-(Ubuntu-Linux))
+* [OS X](https://github.com/openalpr/openalpr/wiki/Compilation-instructions-(OS-X))
+* [Android Library](https://github.com/SandroMachado/openalpr-android)
+* [Android Application Sample](https://github.com/sujaybhowmick/OpenAlprDroidApp)
+* [iOS](https://github.com/twelve17/openalpr-ios)
+* [iOS React Native](https://github.com/cardash/react-native-openalpr)
+* [Xamarin](https://github.com/kevinjpetersen/openalpr-xamarin)
 
 If all went well, there should be an executable named *alpr* along with *libopenalpr-static.a* and *libopenalpr.so* that can be linked into your project.
 
@@ -163,3 +168,5 @@ License
 
 Affero GPLv3
 http://www.gnu.org/licenses/agpl-3.0.html
+
+Commercial-friendly licensing available.  Contact: info@openalpr.com

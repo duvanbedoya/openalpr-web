@@ -1,5 +1,12 @@
 #include "filesystem.h"
 
+#include <algorithm>
+#include <errno.h>
+#include <fstream>
+#include <string.h>
+
+
+
 namespace alpr
 {
 
@@ -111,49 +118,93 @@ namespace alpr
 
   std::string filenameWithoutExtension(std::string filename)
   {
+    int lastslash = filename.find_last_of("/");
+    if (lastslash >= filename.size())
+      lastslash = 0;
+    else
+      lastslash += 1;
+
     int lastindex = filename.find_last_of(".");
-    return filename.substr(0, lastindex);
+
+    return filename.substr(lastslash, lastindex - lastslash);
   }
 
+  std::string get_filename_from_path(std::string file_path)
+  {
+
+    size_t found;
+    found=file_path.find_last_of("/\\");
+
+    if (found != std::string::npos)
+      return file_path.substr(found+1);
+
+    return "";
+
+  }
+
+  std::string get_directory_from_path(std::string file_path)
+  {
+    if (DirectoryExists(file_path.c_str()))
+      return file_path;
+
+    size_t found;
+
+    found=file_path.find_last_of("/\\");
+
+    if (found != std::string::npos)
+      return file_path.substr(0,found);
+
+    return "";
+  }
 
   #ifdef WINDOWS
   // Stub out these functions on Windows.  They're used for the daemon anyway, which isn't supported on Windows.
 
-  int64_t getFileSize(std::string filename) { return 0; }
-  static int makeDir(char *path, mode_t mode) { return 0; }
-  bool makePath(char* path, mode_t mode) { return true; }
-  int64_t getFileCreationTime(std::string filename) { return 0; }
+  static int makeDir(const char *path, mode_t mode) { return 0; }
+  bool makePath(const char* path, mode_t mode) {
+	  std::stringstream pathstream;
+	  pathstream << "mkdir " << path;
+	  std::string candidate_path = pathstream.str();
+	  std::replace(candidate_path.begin(), candidate_path.end(), '/', '\\');
+
+	  system(candidate_path.c_str());
+	  return true;
+  }
+  FileInfo getFileInfo(std::string filename) {
+    FileInfo response;
+    response.creation_time = 0;
+    response.size = 0;
+    return response;
+  }
 
   #else
 
-  int64_t getFileSize(std::string filename)
+  FileInfo getFileInfo(std::string filename)
   {
-      struct stat stat_buf;
-      int rc = stat(filename.c_str(), &stat_buf);
-      //return rc == 0 ? stat_buf.st_size : -1;
+    FileInfo response;
 
-      // 512 bytes is the standard block size
-      if (rc == 0)
-        return 512 * stat_buf.st_blocks;
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    //return rc == 0 ? stat_buf.st_size : -1;
 
-      return -1;
-  }
+    // 512 bytes is the standard block size
+    if (rc == 0)
+    {
+      #if defined(__APPLE__)
+            double milliseconds = (stat_buf.st_ctimespec.tv_sec * 1000) +  (((double) stat_buf.st_ctimespec.tv_nsec) / 1000000.0);
+      #else
+            double milliseconds = (stat_buf.st_ctim.tv_sec * 1000) +  (((double) stat_buf.st_ctim.tv_nsec) / 1000000.0);
+      #endif
+      response.size = 512 * stat_buf.st_blocks;
+      response.creation_time = (int64_t) milliseconds;
+    }
+    else
+    {
+      response.creation_time = 0;
+      response.size = 0;
+    }
 
-  int64_t getFileCreationTime(std::string filename)
-  {
-      struct stat stat_buf;
-      int rc = stat(filename.c_str(), &stat_buf);
-
-      if (rc != 0)
-        return 0;
-
-#if defined(__APPLE__)
-      double milliseconds = (stat_buf.st_ctimespec.tv_sec * 1000) +  (((double) stat_buf.st_ctimespec.tv_nsec) / 1000000.0);
-#else
-      double milliseconds = (stat_buf.st_ctim.tv_sec * 1000) +  (((double) stat_buf.st_ctim.tv_nsec) / 1000000.0);
-#endif
-
-      return (int64_t) milliseconds;
+    return response;
   }
 
   static int makeDir(const char *path, mode_t mode)
@@ -206,7 +257,7 @@ namespace alpr
     if (status == 0)
         status = makeDir(path, mode);
     free(copypath);
-    return (status);
+    return (status == 0);
 
   }
 

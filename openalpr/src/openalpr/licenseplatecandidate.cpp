@@ -38,13 +38,11 @@ namespace alpr
 
   LicensePlateCandidate::~LicensePlateCandidate()
   {
-    delete charSegmenter;
   }
 
   // Must delete this pointer in parent class
   void LicensePlateCandidate::recognize()
   {
-    charSegmenter = NULL;
 
     pipeline_data->isMultiline = config->multiline;
 
@@ -89,8 +87,16 @@ namespace alpr
     cv::Mat color_transmtx = cv::getPerspectiveTransform(projectedPoints, deskewed_points);
     cv::warpPerspective(pipeline_data->colorImg, pipeline_data->color_deskewed, color_transmtx, pipeline_data->color_deskewed.size());
 
-    // Make a grayscale copy as well for faster processing downstream
-    cv::cvtColor(pipeline_data->color_deskewed, pipeline_data->crop_gray, CV_BGR2GRAY);
+    if (pipeline_data->color_deskewed.channels() > 2)
+    {
+      // Make a grayscale copy as well for faster processing downstream
+      cv::cvtColor(pipeline_data->color_deskewed, pipeline_data->crop_gray, CV_BGR2GRAY);
+    }
+    else
+    {
+      // Copy the already grayscale image to the crop_gray img
+      pipeline_data->color_deskewed.copyTo(pipeline_data->crop_gray);
+    }
 
 
     if (this->config->debugGeneral)
@@ -102,7 +108,7 @@ namespace alpr
     // to match the newly deskewed license plate crop
     vector<TextLine> newLines;
     for (unsigned int i = 0; i < pipeline_data->textLines.size(); i++)
-    {        
+    {
       vector<Point2f> textArea = imgTransform.transformSmallPointsToBigImage(pipeline_data->textLines[i].textArea);
       vector<Point2f> linePolygon = imgTransform.transformSmallPointsToBigImage(pipeline_data->textLines[i].linePolygon);
 
@@ -128,7 +134,6 @@ namespace alpr
       cout << "deskew Time: " << diffclock(startTime, endTime) << "ms." << endl;
     }
 
-    charSegmenter = new CharacterSegmenter(pipeline_data);
 
 
   }

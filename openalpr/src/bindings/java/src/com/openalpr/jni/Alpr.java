@@ -1,5 +1,7 @@
 package com.openalpr.jni;
 
+import com.openalpr.jni.json.JSONException;
+
 public class Alpr {
     static {
         // Load the OpenALPR library at runtime
@@ -13,6 +15,7 @@ public class Alpr {
     private native boolean is_loaded();
     private native String native_recognize(String imageFile);
     private native String native_recognize(byte[] imageBytes);
+    private native String native_recognize(long imageData, int bytesPerPixel, int imgWidth, int imgHeight);
 
     private native void set_default_region(String region);
     private native void detect_region(boolean detectRegion);
@@ -36,17 +39,39 @@ public class Alpr {
         return is_loaded();
     }
 
-    public AlprResults recognize(String imageFile)
+    public AlprResults recognize(String imageFile) throws AlprException
     {
-        String json = native_recognize(imageFile);
-        return new AlprResults(json);
+        try {
+            String json = native_recognize(imageFile);
+            return new AlprResults(json);
+        } catch (JSONException e)
+        {
+            throw new AlprException("Unable to parse ALPR results");
+        }
     }
 
 
-    public AlprResults recognize(byte[] imageBytes)
+    public AlprResults recognize(byte[] imageBytes) throws AlprException
     {
-        String json = native_recognize(imageBytes);
-        return new AlprResults(json);
+        try {
+            String json = native_recognize(imageBytes);
+            return new AlprResults(json);
+        } catch (JSONException e)
+        {
+            throw new AlprException("Unable to parse ALPR results");
+        }
+    }
+
+
+    public AlprResults recognize(long imageData, int bytesPerPixel, int imgWidth, int imgHeight) throws AlprException
+    {
+        try {
+            String json = native_recognize(imageData, bytesPerPixel, imgWidth, imgHeight);
+            return new AlprResults(json);
+        } catch (JSONException e)
+        {
+            throw new AlprException("Unable to parse ALPR results");
+        }
     }
 
 

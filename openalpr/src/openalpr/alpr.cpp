@@ -20,6 +20,8 @@
 #include "alpr.h"
 #include "alpr_impl.h"
 
+#include <fstream>
+
 namespace alpr
 {
 
@@ -82,11 +84,27 @@ namespace alpr
   {
     return AlprImpl::toJson(results);
   }
+  std::string Alpr::toJson( AlprPlateResult result )
+  {
+    return AlprImpl::toJson(result);
+  }
 
   AlprResults Alpr::fromJson(std::string json) {
     return AlprImpl::fromJson(json);
   }
 
+  void Alpr::setCountry(std::string country) {
+    impl->setCountry(country);
+  }
+
+  void Alpr::setPrewarp(std::string prewarp_config) {
+    impl->setPrewarp(prewarp_config);
+  }
+
+  void Alpr::setMask(unsigned char* pixelData, int bytesPerPixel, int imgWidth, int imgHeight)
+  {
+    impl->setMask(pixelData, bytesPerPixel, imgWidth, imgHeight);
+  }
 
   void Alpr::setDetectRegion(bool detectRegion)
   {

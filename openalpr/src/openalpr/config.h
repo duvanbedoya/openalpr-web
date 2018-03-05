@@ -24,11 +24,8 @@
 
 #include "constants.h"
 
-#include <stdio.h>
-#include <iostream>
+#include <string>
 #include <vector>
-#include <stdlib.h>     /* getenv */
-#include <math.h>
 
 namespace alpr
 {
@@ -40,7 +37,11 @@ namespace alpr
       Config(const std::string country, const std::string config_file = "", const std::string runtime_dir = "");
       virtual ~Config();
 
+      bool load_countries(const std::string countries);
+      
       bool loaded;
+      
+      std::string config_file_path;
 
       std::string country;
 
@@ -53,8 +54,14 @@ namespace alpr
       int maxDetectionInputWidth;
       int maxDetectionInputHeight;
       
+      float contrastDetectionThreshold;
+      
       bool skipDetection;
+      
+      std::string detection_mask_image;
 
+      int analysis_count;
+      
       bool auto_invert;
       bool always_invert;
 
@@ -70,10 +77,15 @@ namespace alpr
       float plateWidthMM;
       float plateHeightMM;
 
-      float charHeightMM;
-      float charWidthMM;
+      std::vector<float> charHeightMM;
+      std::vector<float> charWidthMM;
+      
+      float avgCharHeightMM;
+      float avgCharWidthMM;
+      
       float charWhitespaceTopMM;
       float charWhitespaceBotMM;
+      float charWhitespaceBetweenLinesMM;
 
       int templateWidthPx;
       int templateHeightPx;
@@ -92,13 +104,18 @@ namespace alpr
       float plateLinesSensitivityVertical;
       float plateLinesSensitivityHorizontal;
 
+      float segmentationMinSpeckleHeightPercent;
       int segmentationMinBoxWidthPx;
       float segmentationMinCharHeightPercent;
       float segmentationMaxCharWidthvsAverage;
 
+      std::string detectorFile;
+      
       std::string ocrLanguage;
       int ocrMinFontSize;
 
+      bool mustMatchPattern;
+      
       float postProcessMinConfidence;
       float postProcessConfidenceSkipLevel;
       unsigned int postProcessMinCharacters;
@@ -141,6 +158,7 @@ namespace alpr
       float stateIdImagePercent;
 
       std::vector<std::string> parse_country_string(std::string countries);
+      bool country_is_loaded(std::string country);
 
       void loadCommonValues(std::string configFile);
       void loadCountryValues(std::string configFile, std::string country);

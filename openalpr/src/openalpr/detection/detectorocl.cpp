@@ -32,7 +32,7 @@ namespace alpr
 {
 
 
-  DetectorOCL::DetectorOCL(Config* config) : Detector(config) {
+  DetectorOCL::DetectorOCL(Config* config, PreWarp* prewarp) : Detector(config, prewarp) {
 
     tthread::lock_guard<tthread::mutex> guard(ocl_detector_mutex_m);
 
@@ -83,14 +83,14 @@ namespace alpr
       this->loaded = false;
       cerr << "OpenCL not detected" << endl;
     }
-	else if( this->plate_cascade.load( config->getCascadeRuntimeDir() + config->country + ".xml" ) )
+	else if( this->plate_cascade.load( get_detector_file() ) )
 		{
 			this->loaded = true;
 		}
 		else
 		{
 			this->loaded = false;
-			cout << "--(!)Error loading cascade " << config->country << ".xml\n" << endl;
+			cerr << "--(!)Error loading cascade " << get_detector_file() << "\n" << endl;
 		}
   }
 
@@ -98,59 +98,16 @@ namespace alpr
   DetectorOCL::~DetectorOCL() {
   }
 
-  vector<PlateRegion> DetectorOCL::detect(Mat frame, std::vector<cv::Rect> regionsOfInterest)
+
+  vector<Rect> DetectorOCL::find_plates(Mat orig_frame, cv::Size min_plate_size, cv::Size max_plate_size)
   {
 
-    Mat frame_gray;
-
-    if (frame.channels() > 2)
-    {
-      cvtColor( frame, frame_gray, CV_BGR2GRAY );
-    }
-    else
-    {
-      frame.copyTo(frame_gray);
-    }
-
-
-    vector<PlateRegion> detectedRegions;
-    for (int i = 0; i < regionsOfInterest.size(); i++)
-    {
-      // Sanity check.  If roi width or height is less than minimum possible plate size,
-      // then skip it
-      if ((regionsOfInterest[i].width < config->minPlateSizeWidthPx) ||
-          (regionsOfInterest[i].height < config->minPlateSizeHeightPx))
-        continue;
-
-      Mat cropped = frame_gray(regionsOfInterest[i]);
-      vector<PlateRegion> subRegions = doCascade(cropped, regionsOfInterest[i].x, regionsOfInterest[i].y);
-
-      for (int j = 0; j < subRegions.size(); j++)
-        detectedRegions.push_back(subRegions[j]);
-    }
-    return detectedRegions;
-  }
-
-  vector<PlateRegion> DetectorOCL::doCascade(Mat orig_frame, int offset_x, int offset_y)
-  {
-
-
-    int w = orig_frame.size().width;
-    int h = orig_frame.size().height;
-
-    float scale_factor = computeScaleFactor(w, h);
 
     vector<Rect> plates;
 
     //-- Detect plates
     timespec startTime;
     getTimeMonotonic(&startTime);
-
-    float maxWidth = ((float) w) * (config->maxPlateWidthPercent / 100.0f) * scale_factor;
-    float maxHeight = ((float) h) * (config->maxPlateHeightPercent / 100.0f) * scale_factor;
-
-    Size minSize(config->minPlateSizeWidthPx * scale_factor, config->minPlateSizeHeightPx * scale_factor);
-    Size maxSize(maxWidth, maxHeight);
 
     // If we have an OpenCL core available, use it.  Otherwise use CPU
     if (ocl_detector_mutex_m.try_lock())
@@ -160,12 +117,9 @@ namespace alpr
 
       equalizeHist( openclFrame, openclFrame );
 
-      if (scale_factor != 1.0)
-        resize(openclFrame, openclFrame, Size(w * scale_factor, h * scale_factor));
-
       plate_cascade.detectMultiScale( openclFrame, plates, config->detection_iteration_increase, config->detectionStrictness,
-                                      0,
-                                      minSize, maxSize );
+                                      CV_HAAR_DO_CANNY_PRUNING,
+                                      min_plate_size, max_plate_size );
 
       ocl_detector_mutex_m.unlock();
     }
@@ -173,16 +127,10 @@ namespace alpr
     {
       equalizeHist( orig_frame, orig_frame );
 
-      if (scale_factor != 1.0)
-        resize(orig_frame, orig_frame, Size(w * scale_factor, h * scale_factor));
-
       plate_cascade.detectMultiScale( orig_frame, plates, config->detection_iteration_increase, config->detectionStrictness,
-                                      0,
-                                      minSize, maxSize );
+                                      CV_HAAR_DO_CANNY_PRUNING,
+                                      min_plate_size, max_plate_size );
     }
-
-
-
 
 
     if (config->debugTiming)
@@ -192,23 +140,8 @@ namespace alpr
       cout << "LBP Time: " << diffclock(startTime, endTime) << "ms." << endl;
     }
 
-    for( unsigned int i = 0; i < plates.size(); i++ )
-    {
-      plates[i].x = (plates[i].x / scale_factor);
-      plates[i].y = (plates[i].y / scale_factor);
-      plates[i].width = plates[i].width / scale_factor;
-      plates[i].height = plates[i].height / scale_factor;
+    return plates;
 
-      // Ensure that the rectangle isn't < 0 or > maxWidth/Height
-      plates[i] = expandRect(plates[i], 0, 0, w, h);
-
-      plates[i].x = plates[i].x + offset_x;
-      plates[i].y = plates[i].y + offset_y;
-    }
-
-    vector<PlateRegion> orderedRegions = aggregateRegions(plates);
-
-    return orderedRegions;
 
   }
 

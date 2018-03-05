@@ -22,8 +22,8 @@
 
 #include <iostream>
 #include <fstream>
-#include <sstream>
-#include <stdio.h>
+#include <string>
+#include <vector>
 #include "../tclap/CmdLine.h"
 #include "utility.h"
 #include "support/utf8.h"
@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
   vector<string> font_sheet_files;
   string char_list_file;
   string out_dir;
+  bool debug;
   
 
   TCLAP::CmdLine cmd("OpenAlpr OCR Training Font Sheet Prep Utility", ' ', "1.0.0");
@@ -106,6 +107,7 @@ int main(int argc, char** argv) {
   
   TCLAP::ValueArg<std::string> outDirArg("","out_dir","Output directory to put the character images",true, "" ,"output_dir");
   
+  TCLAP::SwitchArg debugSwitch("","debug","Enable debug output.  Default=off", cmd, false);
   
   try
   {
@@ -116,13 +118,14 @@ int main(int argc, char** argv) {
     
     if (cmd.parse( argc, argv ) == false)
     {
-      // Error occured while parsing.  Exit now.
+      // Error occurred while parsing.  Exit now.
       return 1;
     }
 
     font_sheet_files = fontSheetArg.getValue();
     char_list_file = charListArg.getValue();
     out_dir = outDirArg.getValue();
+    debug = debugSwitch.getValue();
     
   }
   catch (TCLAP::ArgException &e)    // catch any exceptions
@@ -197,7 +200,9 @@ int main(int argc, char** argv) {
         }
       }
       resize(testImg, testImg, Size(700, 1000));
-      drawAndWait(&testImg);
+      
+      if (debug)
+        drawAndWait(&testImg);
       
       // Adjust the threshold w/ the morphology operation that OpenALPR uses
       Mat closureElement = getStructuringElement( 1,
@@ -238,17 +243,27 @@ int main(int argc, char** argv) {
         return 1;
       }
       
-      show_debug_image(rectangles, thresholds[t]);
-      int text_content_length = utf8::distance(text_content.begin(), text_content.end());
-      if (rectangles.size() != text_content_length - 1)
+      if (debug)
+        show_debug_image(rectangles, thresholds[t]);
+      
+      vector<std::string> valid_characters;
+      
+      string::iterator utf_iterator = text_content.begin();
+      while (utf_iterator < text_content.end())
       {
-        cout << "Number of blobs (" << rectangles.size() << ") != number of characters (" << text_content_length << ")" << endl;
+        int cp = utf8::next(utf_iterator, text_content.end());
+        string utf_character = utf8chr(cp);
+        if (utf_character != "\n" && utf_character != " " && utf_character != " ")
+          valid_characters.push_back(utf_character);
+      }
+      
+      if (rectangles.size() != valid_characters.size())
+      {
+        cout << "Number of blobs (" << rectangles.size() << ") != number of characters (" << valid_characters.size() << ")" << endl;
         cout << "Skipping..." << endl;
         //return 1;
         continue;
       }
-      
-      string::iterator utf_iterator = text_content.begin();
       
       
       for (unsigned int i = 0; i < rectangles.size(); i++)
@@ -256,9 +271,8 @@ int main(int argc, char** argv) {
         Rect mr = rectangles[i];
         Mat croppedChar = thresholds[t](mr);
         
-        int cp = utf8::next(utf_iterator, text_content.end());
         stringstream ss;
-        ss << out_dir << "/" << utf8chr(cp) << "-" << font_sheet_index << "-" << t << "-" << i << ".png";
+        ss << out_dir << "/" << valid_characters[i] << "-" << font_sheet_index << "-" << t << "-" << i << ".png";
         
         imwrite(ss.str(), croppedChar);
         

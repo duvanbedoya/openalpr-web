@@ -30,6 +30,7 @@
 #include <float.h>
 #include <limits.h>
 #include <ctype.h>
+#include <locale.h>
 #include "cjson.h"
 
 static const char *ep;
@@ -100,7 +101,7 @@ static const char *parse_number(cJSON *item,const char *num)
 	if (*num=='-') sign=-1,num++;	/* Has sign? */
 	if (*num=='0') num++;			/* is zero */
 	if (*num>='1' && *num<='9')	do	n=(n*10.0)+(*num++ -'0');	while (*num>='0' && *num<='9');	/* Number? */
-	if (*num=='.' && num[1]>='0' && num[1]<='9') {num++;		do	n=(n*10.0)+(*num++ -'0'),scale--; while (*num>='0' && *num<='9');}	/* Fractional part? */
+	if (*num=='.' || *num==','  && num[1]>='0' && num[1]<='9') {num++;		do	n=(n*10.0)+(*num++ -'0'),scale--; while (*num>='0' && *num<='9');}	/* Fractional part? */
 	if (*num=='e' || *num=='E')		/* Exponent? */
 	{	num++;if (*num=='+') num++;	else if (*num=='-') signsubscale=-1,num++;		/* With sign? */
 		while (*num>='0' && *num<='9') subscale=(subscale*10)+(*num++ - '0');	/* Number? */
@@ -117,6 +118,9 @@ static const char *parse_number(cJSON *item,const char *num)
 /* Render the number nicely from the given item into a string. */
 static char *print_number(cJSON *item)
 {
+    char * locale = setlocale(LC_ALL, NULL);
+    setlocale(LC_NUMERIC, "C");
+
 	char *str;
 	double d=item->valuedouble;
 	if (fabs(((double)item->valueint)-d)<=DBL_EPSILON && d<=INT_MAX && d>=INT_MIN)
@@ -134,6 +138,8 @@ static char *print_number(cJSON *item)
 			else												sprintf(str,"%f",d);
 		}
 	}
+
+	setlocale(LC_NUMERIC, locale);
 	return str;
 }
 

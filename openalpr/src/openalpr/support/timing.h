@@ -17,14 +17,14 @@
 		long   tv_nsec; // Nanoseconds - [0, 999999999]
 	};
 	#else
-	//#define timespec timeval
+
 	#endif
 #else
     #include <sys/time.h>
 #endif
 
 // Support for OS X
-#ifdef __MACH__
+#if defined(__APPLE__) && defined(__MACH__)
 #include <mach/clock.h>
 #include <mach/mach.h>
 #endif

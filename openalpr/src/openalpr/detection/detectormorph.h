@@ -20,8 +20,6 @@
 #ifndef OPENALPR_DETECTORMORPH_H
 #define	OPENALPR_DETECTORMORPH_H
 
-#include <stdio.h>
-#include <iostream>
 #include <vector>
 
 #include "opencv2/objdetect/objdetect.hpp"
@@ -35,10 +33,10 @@ namespace alpr {
 
   class DetectorMorph : public Detector {
   public:
-    DetectorMorph(Config* config);
+    DetectorMorph(Config* config, PreWarp* prewarp);
     virtual ~DetectorMorph();
 
-    std::vector<PlateRegion> detect(cv::Mat frame, std::vector<cv::Rect> regionsOfInterest);
+    std::vector<cv::Rect> find_plates(cv::Mat frame, cv::Size min_plate_size, cv::Size max_plate_size);
 
   private:
     bool CheckSizes(cv::RotatedRect& mr);

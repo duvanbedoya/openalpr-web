@@ -18,6 +18,8 @@
 */
 
 #include <opencv2/core/core.hpp>
+#include <functional>
+#include <cctype>
 
 #include "utility.h"
 
@@ -38,18 +40,12 @@ namespace alpr
     expandedRegion.y = expandedRegion.y - halfY;
     expandedRegion.height =  expandedRegion.height + expandYPixels;
 
-    if (expandedRegion.x < 0)
-      expandedRegion.x = 0;
-    if (expandedRegion.y < 0)
-      expandedRegion.y = 0;
-    if (expandedRegion.x + expandedRegion.width > maxX)
+	expandedRegion.x = std::min(std::max(expandedRegion.x, 0), maxX);
+	expandedRegion.y = std::min(std::max(expandedRegion.y, 0), maxY);
+	if (expandedRegion.x + expandedRegion.width > maxX)
       expandedRegion.width = maxX - expandedRegion.x;
     if (expandedRegion.y + expandedRegion.height > maxY)
       expandedRegion.height = maxY - expandedRegion.y;
-    if (expandedRegion.width < 0)
-      expandedRegion.width = 0;
-    if (expandedRegion.height < 0)
-      expandedRegion.height = 0;
     
     return expandedRegion;
   }
@@ -439,6 +435,12 @@ int levenshteinDistance (const std::string &s1, const std::string &s2, int max)
     return slope * (x - p2.x) + p2.y;
   }
 
+  float LineSegment::getXPointAt(float y)
+  {
+    float y_intercept = getPointAt(0);
+    return (y - y_intercept) / slope;
+  }
+  
   Point LineSegment::closestPointOnSegmentTo(Point p)
   {
     float top = (p.x - p1.x) * (p2.x - p1.x) + (p.y - p1.y)*(p2.y - p1.y);
@@ -518,7 +520,39 @@ int levenshteinDistance (const std::string &s1, const std::string &s2, int max)
 
     return result;
   }
+  
+  cv::Point findClosestPoint(cv::Point2f* polygon_points, int num_points, cv::Point position)
+  {
+    int closest_point_index = 0;
+    unsigned int smallest_distance = INT_MAX;
+    for (unsigned int i = 0; i < num_points; i++)
+    {
+      Point pos((int)polygon_points[i].x, (int)polygon_points[i].y);
+      unsigned int distance = distanceBetweenPoints(pos, position);
+      //std::cout << "polys Distance between: " << position << " and " << pos << " = " << distance << endl;
+      if (distance < smallest_distance)
+      {
+        smallest_distance = distance;
+        closest_point_index = i;
+      }
+    }
+    
+    return Point((int)polygon_points[closest_point_index].x, (int)polygon_points[closest_point_index].y);
+  }
+  
+  std::vector<cv::Point> sortPolygonPoints(cv::Point2f* polygon_points, cv::Size surrounding_image)
+  {
+    
+    vector<Point> return_points;
+    
+    // Find top-left
+    return_points.push_back( findClosestPoint(polygon_points, 4, Point(0, 0)) );
+    return_points.push_back( findClosestPoint(polygon_points, 4,Point(surrounding_image.width, 0)) );
+    return_points.push_back( findClosestPoint(polygon_points, 4,Point(surrounding_image.width, surrounding_image.height)) );
+    return_points.push_back( findClosestPoint(polygon_points, 4,Point(0, surrounding_image.height)) );
 
+    return return_points;
+  }
   // Given a contour and a mask, this function determines what percentage of the contour (area)
   // is inside the masked area. 
   float getContourAreaPercentInsideMask(cv::Mat mask, std::vector<std::vector<cv::Point> > contours, std::vector<cv::Vec4i> hierarchy, int contourIndex)
@@ -577,6 +611,15 @@ int levenshteinDistance (const std::string &s1, const std::string &s2, int max)
     stringstream ss;
     ss << value;
     return ss.str();
+  }
+
+  std::string replaceAll(std::string str, const std::string& from, const std::string& to) {
+    size_t start_pos = 0;
+    while((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+    }
+    return str;
   }
 
 // trim from start

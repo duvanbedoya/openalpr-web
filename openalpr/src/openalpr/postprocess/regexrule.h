@@ -20,10 +20,8 @@
 #ifndef OPENALPR_REGEXRULE_H
 #define	OPENALPR_REGEXRULE_H
 
-#include <iostream>
 #include <string>
-#include <cstring>
-#include <vector>
+
 #include "support/re2.h"
 #include "support/utf8.h"
 #include "support/tinythread.h"
@@ -37,7 +35,6 @@ namespace alpr
       virtual ~RegexRule();
 
       bool match(std::string text);
-      std::string filterSkips(std::string text);
 
     private:
       bool valid;
@@ -47,7 +44,6 @@ namespace alpr
       std::string original;
       std::string regex;
       std::string region;
-      std::vector<int> skipPositions;
   };
 }
 

@@ -17,6 +17,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <iostream>
 #include <sstream>
 
 #include "regexrule.h"
@@ -76,7 +77,6 @@ namespace alpr
       else if (utf_character == "?")
       {
         regexval << ".";
-        this->skipPositions.push_back(numchars);
       }
       else if (utf_character == "@")
       {
@@ -140,27 +140,6 @@ namespace alpr
     return match;
   }
 
-  string RegexRule::filterSkips(string text)
-  {
-    string response = "";
-    for (int i = 0; i < text.size(); i++)
-    {
-      bool skip = false;
-      for (int j = 0; j < skipPositions.size(); j++)
-      {
-        if (skipPositions[j] == i)
-        {
-          skip = true;
-          break;
-        }
-      }
-
-      if (skip == false)
-        response = response + text[i];
-    }
-
-    return response;
-  }
 
 }
 

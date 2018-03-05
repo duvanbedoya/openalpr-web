@@ -1,11 +1,13 @@
 project(src)
 
+set(CMAKE_BUILD_TYPE RelWithDebugInfo)
 #set(CMAKE_BUILD_TYPE Debug)
+
 cmake_minimum_required (VERSION 2.6)
 
 # Set the OpenALPR version in cmake, and also add it as a DEFINE for the code to access
 SET(OPENALPR_MAJOR_VERSION "2")
-SET(OPENALPR_MINOR_VERSION "1")
+SET(OPENALPR_MINOR_VERSION "3")
 SET(OPENALPR_PATCH_VERSION "0")
 SET(OPENALPR_VERSION ${OPENALPR_MAJOR_VERSION}.${OPENALPR_MINOR_VERSION}.${OPENALPR_PATCH_VERSION})
 
@@ -14,6 +16,8 @@ add_definitions( -DOPENALPR_MINOR_VERSION=${OPENALPR_MINOR_VERSION})
 add_definitions( -DOPENALPR_PATCH_VERSION=${OPENALPR_PATCH_VERSION})
 
 SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake_modules/")
+
+add_definitions( -DINSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}")
 
 # TODO: switch to http://www.cmake.org/cmake/help/v2.8.5/cmake.html#module:GNUInstallDirs ?
 IF (NOT CMAKE_INSTALL_SYSCONFDIR) 
@@ -25,6 +29,10 @@ ENDIF()
 
 IF ( NOT DEFINED WITH_DAEMON )
   SET(WITH_DAEMON ON)
+ENDIF()
+
+IF ( NOT DEFINED WITH_STATEDETECTION )
+  SET(WITH_STATEDETECTION OFF)
 ENDIF()
 
 if ( NOT DEFINED WITH_GPU_DETECTOR )
@@ -39,8 +47,13 @@ if ( NOT DEFINED WITH_BINDING_JAVA )
   SET(WITH_BINDING_JAVA ON)
 ENDIF()
 
+          
 if ( NOT DEFINED WITH_BINDING_PYTHON )
   SET(WITH_BINDING_PYTHON ON)
+ENDIF()
+
+if ( NOT DEFINED WITH_BINDING_GO )
+  SET(WITH_BINDING_GO ON)
 ENDIF()
 
 if ( NOT DEFINED WITH_UTILITIES )
@@ -52,17 +65,42 @@ IF (WIN32 AND WITH_DAEMON)
   SET(WITH_DAEMON OFF)
 ENDIF()
 
-FIND_PACKAGE( Tesseract REQUIRED )
+IF (WIN32 AND WITH_TESTS) 
+  MESSAGE(WARNING "Skipping unit tests, as it is not supported in Windows.")
+  SET(WITH_TESTS OFF)
+ENDIF()
+
+IF(Tesseract_FRAMEWORK_PATH AND Leptonica_FRAMEWORK_PATH) 
+  MESSAGE(STATUS "Using Tesseract iOS framework: ${Tesseract_FRAMEWORK_PATH}")
+  MESSAGE(STATUS "Using Leptonica iOS framework: ${Leptonica_FRAMEWORK_PATH}")
+  # http://www.vtk.org/Wiki/CMake:HowToUseExistingOSXFrameworks
+  SET(Tesseract_LIBRARIES "${Tesseract_FRAMEWORK_PATH};${Leptonica_FRAMEWORK_PATH}")
+  SET(Tesseract_INCLUDE_DIRS "${Tesseract_FRAMEWORK_PATH}/Headers")
+ELSE()
+  FIND_PACKAGE( Tesseract REQUIRED )
+ENDIF()
 
 include_directories(${Tesseract_INCLUDE_DIRS})
 
-# Discover OpenCV directory automatically
-find_path(OpenCV_DIR
-  NAMES OpenCVConfig.cmake
-  HINTS ${CMAKE_SOURCE_DIR}/../libraries/opencv/
-)
-# Opencv Package
-FIND_PACKAGE( OpenCV REQUIRED )
+IF(OpenCV_FRAMEWORK_PATH)
+  MESSAGE(STATUS "Using OpenCV iOS framework: ${OpenCV_FRAMEWORK_PATH}")
+  SET(OpenCV_INCLUDE_DIRS "${OpenCV_FRAMEWORK_PATH}/Headers")
+  SET(OpenCV_LIBS ${OpenCV_FRAMEWORK_PATH})
+
+  # OpenCV's released framework has this disabled, so we must too.
+  # http://stackoverflow.com/a/32710441/868173
+  SET(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE NO)
+ELSE()
+  # Discover OpenCV directory automatically
+  find_path(OpenCV_DIR
+    NAMES OpenCVConfig.cmake
+    HINTS ${CMAKE_SOURCE_DIR}/../libraries/opencv/
+    /storage/projects/alpr/libraries/opencv/
+    )
+  # Opencv Package
+  FIND_PACKAGE( OpenCV REQUIRED )
+ENDIF()
+
 IF (${OpenCV_VERSION} VERSION_LESS 2.4.7)
 	MESSAGE(FATAL_ERROR "OpenCV version is not compatible : ${OpenCV_VERSION}")
 ENDIF()
@@ -93,7 +131,9 @@ ENDIF()
 
 
 set(CMAKE_CSS_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall ")
-ADD_EXECUTABLE( alpr  main.cpp )
+if (NOT IOS)
+  ADD_EXECUTABLE( alpr  main.cpp )
+ENDIF()
 
 if (WIN32) 
    SET(OPENALPR_LIB openalpr-static)
@@ -101,28 +141,47 @@ ELSE()
    SET(OPENALPR_LIB openalpr)
 ENDIF()
 
-TARGET_LINK_LIBRARIES(alpr
-	${OPENALPR_LIB}
-	statedetection
-	support
+IF (WITH_STATEDETECTION)
+  SET(STATE_DETECTION_LIB statedetection)
+  add_subdirectory(statedetection)
+ELSE()
+  SET(STATE_DETECTION_LIB "")
+  add_definitions( -DSKIP_STATE_DETECTION=1 )
+ENDIF()
+
+if (NOT IOS)
+  TARGET_LINK_LIBRARIES(alpr
+    ${OPENALPR_LIB}
+    ${STATE_DETECTION_LIB}
+    support
     video
-	${OpenCV_LIBS}
-	${Tesseract_LIBRARIES}
+    ${OpenCV_LIBS}
+    ${Tesseract_LIBRARIES}
     ${Extra_LIBS}
   )
+ENDIF()
+
 
 # Compile the alprd library on Unix-based OS
 IF (WITH_DAEMON)
-  ADD_EXECUTABLE( alprd  daemon.cpp daemon/beanstalk.c daemon/beanstalk.cc )
+  ADD_EXECUTABLE( alprd  
+    daemon.cpp 
+    daemon/daemonconfig.cpp 
+    daemon/beanstalk.c 
+    daemon/beanstalk.cc 
+)
+
+  FIND_PACKAGE( CURL REQUIRED )
+  FIND_PACKAGE( log4cplus REQUIRED )
 
   TARGET_LINK_LIBRARIES(alprd
-	  openalpr
+      ${OPENALPR_LIB}
 	  support
       video
 	  curl
-	  log4cplus
 	  ${OpenCV_LIBS}
 	  ${Tesseract_LIBRARIES}
+	  ${log4cplus_LIBRARIES}
       ${Extra_LIBS}
     )
 	
@@ -137,7 +196,6 @@ add_subdirectory(tests)
 ENDIF()
 
 add_subdirectory(openalpr)
-add_subdirectory(statedetection)
 add_subdirectory(video)
 
 if (WITH_BINDING_JAVA) 
@@ -147,18 +205,35 @@ ENDIF()
 if (WITH_BINDING_PYTHON)
 add_subdirectory(bindings/python)
 ENDIF()
+        
 
-install (TARGETS    alpr DESTINATION   ${CMAKE_INSTALL_PREFIX}/bin)
-install (FILES      ${CMAKE_SOURCE_DIR}/../doc/man/alpr.1 DESTINATION       ${CMAKE_INSTALL_PREFIX}/share/man/man1 COMPONENT doc)
+if (WITH_BINDING_GO)
+    set(OPENALPR_LIB_GO openalprgo)
+    set(TAG_OPENALPR_LIB_GO "-l${OPENALPR_LIB_GO}")
+    add_subdirectory(bindings/go)
+ENDIF()
+
+if (NOT IOS)
+  install (TARGETS    alpr DESTINATION   ${CMAKE_INSTALL_PREFIX}/bin)
+  install (FILES      ${CMAKE_SOURCE_DIR}/../doc/man/alpr.1 DESTINATION       ${CMAKE_INSTALL_PREFIX}/share/man/man1 COMPONENT doc)
+ENDIF()
 install (DIRECTORY  ${CMAKE_SOURCE_DIR}/../runtime_data DESTINATION         ${CMAKE_INSTALL_PREFIX}/share/openalpr)
 
 # set runtime_data to reflect the current CMAKE_INSTALL_PREFIX
-CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/../config/openalpr.conf.in ${CMAKE_CURRENT_BINARY_DIR}/config/openalpr.conf)
+CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/../config/openalpr.conf.user ${CMAKE_CURRENT_BINARY_DIR}/config/openalpr.conf)
 install (FILES      ${CMAKE_CURRENT_BINARY_DIR}/config/openalpr.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/openalpr/      COMPONENT config)
 
+CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/../config/openalpr.conf.defaults ${CMAKE_CURRENT_BINARY_DIR}/share/openalpr/config/openalpr.defaults.conf)
+install (FILES      ${CMAKE_CURRENT_BINARY_DIR}/share/openalpr/config/openalpr.defaults.conf DESTINATION ${CMAKE_INSTALL_PREFIX}/share/openalpr/config      COMPONENT config)
+
 IF (WITH_DAEMON)
+  CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/../config/alprd.conf.user ${CMAKE_CURRENT_BINARY_DIR}/config/alprd.conf)
+  install (FILES      ${CMAKE_CURRENT_BINARY_DIR}/config/alprd.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/openalpr/      COMPONENT config)
+
+  CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/../config/alprd.conf.defaults ${CMAKE_CURRENT_BINARY_DIR}/share/openalpr/config/alprd.defaults.conf)
+  install (FILES      ${CMAKE_CURRENT_BINARY_DIR}/share/openalpr/config/alprd.defaults.conf DESTINATION ${CMAKE_INSTALL_PREFIX}/share/openalpr/config      COMPONENT config)
+
   install (TARGETS    alprd DESTINATION  ${CMAKE_INSTALL_PREFIX}/bin)
-  install (FILES      ${CMAKE_SOURCE_DIR}/../config/alprd.conf DESTINATION    ${CMAKE_INSTALL_SYSCONFDIR}/openalpr      COMPONENT config)
 ENDIF()
 
 

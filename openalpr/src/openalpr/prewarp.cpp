@@ -28,15 +28,22 @@ using namespace cv;
 namespace alpr
 {
 
-  PreWarp::PreWarp(Config* config) {
+  PreWarp::PreWarp(Config* config)
+  {
     this->config = config;
-    
-    string warp_config = config->prewarp;
+    initialize(config->prewarp);
+  }
+  
+
+  void PreWarp::initialize(std::string prewarp_config) {
+
+    timespec startTime;
+    getTimeMonotonic(&startTime);
     
     // Do a cursory verification based on number of commas
-    int commacount = count(warp_config.begin(), warp_config.end(), ',');
+    int commacount = count(prewarp_config.begin(), prewarp_config.end(), ',');
     
-    if (warp_config.length() < 4)
+    if (prewarp_config.length() < 4)
     {
       // No config specified.  ignore
       if (this->config->debugPrewarp)
@@ -55,10 +62,10 @@ namespace alpr
     {
 
       // Parse the warp_config
-      int first_comma = warp_config.find(",");
+      int first_comma = prewarp_config.find(",");
 
 
-      string name = warp_config.substr(0, first_comma);
+      string name = prewarp_config.substr(0, first_comma);
       
       if (name != "planar")
       {
@@ -66,8 +73,9 @@ namespace alpr
       }
       else
       {
-        stringstream ss(warp_config.substr(first_comma + 1, warp_config.length()));
+        stringstream ss(prewarp_config.substr(first_comma + 1, prewarp_config.length()));
 
+        float w, h, rotationx, rotationy, rotationz, panX, panY,  stretchX, dist;
         ss >> w;
         ss.ignore();
         ss >> h;
@@ -86,16 +94,49 @@ namespace alpr
         ss.ignore();  // Ignore comma
         ss >> panY;
         
-        this->valid = true;
+        setTransform(w, h, rotationx, rotationy, rotationz, panX, panY, stretchX, dist);
       }
 
     }
+    
+    timespec endTime;
+    getTimeMonotonic(&endTime);
+    if (config->debugTiming)
+      cout << "Prewarp Initialization Time: " << diffclock(startTime, endTime) << "ms." << endl;
   }
-
+  void PreWarp::clear() {
+    this->valid = false;
+  }
 
   PreWarp::~PreWarp() {
   }
   
+  std::string PreWarp::toString() {
+    
+    if (!this->valid)
+      return "";
+    
+    stringstream sstream;
+    sstream << "planar," << w << "," << h << "," << rotationx << "," << rotationy << "," << rotationz << ","
+            << panX << "," << panY << "," << stretchX << "," << dist;
+    
+    return sstream.str();
+  }
+
+  void PreWarp::setTransform(float w, float h, float rotationx, float rotationy, float rotationz, float panX, float panY, float stretchX, float dist)
+  {
+    this->w = w;
+    this->h = h;
+    this->rotationx = rotationx;
+    this->rotationy = rotationy;
+    this->rotationz = rotationz;
+    this->panX = panX;
+    this->panY = panY;
+    this->stretchX = stretchX;
+    this->dist = dist;
+    
+    this->valid = true;
+  }
   
   cv::Mat PreWarp::warpImage(Mat image) {
     if (!this->valid)
@@ -115,7 +156,7 @@ namespace alpr
     float py = panY / height_ratio;
 
 
-    transform = findTransform(image.cols, image.rows, rx, ry, rotationz, px, py, stretchX, dist);
+    transform = getTransform(image.cols, image.rows, rx, ry, rotationz, px, py, stretchX, dist);
     
     
     Mat warped_image;
@@ -142,21 +183,26 @@ namespace alpr
     
     for (unsigned int i = 0; i < rects.size(); i++)
     {
+      Rect r = projectRect(rects[i], maxWidth, maxHeight, inverse);
+      projected_rects.push_back(r);
+    }
+    
+    return projected_rects;
+  }
+  
+  Rect PreWarp::projectRect(Rect rect, int maxWidth, int maxHeight, bool inverse) {
       vector<Point2f> points;
-      points.push_back(Point(rects[i].x, rects[i].y));
-      points.push_back(Point(rects[i].x + rects[i].width, rects[i].y));
-      points.push_back(Point(rects[i].x + rects[i].width, rects[i].y + rects[i].height));
-      points.push_back(Point(rects[i].x, rects[i].y + rects[i].height));
+      points.push_back(Point(rect.x, rect.y));
+      points.push_back(Point(rect.x + rect.width, rect.y));
+      points.push_back(Point(rect.x + rect.width, rect.y + rect.height));
+      points.push_back(Point(rect.x, rect.y + rect.height));
       
       vector<Point2f> projectedPoints = projectPoints(points, inverse);
       
       Rect projectedRect = boundingRect(projectedPoints);
       projectedRect = expandRect(projectedRect, 0, 0, maxWidth, maxHeight);
-      projected_rects.push_back(projectedRect);
       
-    }
-    
-    return projected_rects;
+      return projectedRect;
   }
 
   vector<Point2f> PreWarp::projectPoints(vector<Point2f> points, bool inverse) {
@@ -194,7 +240,7 @@ namespace alpr
     }
   }
   
-  cv::Mat PreWarp::findTransform(float w, float h, 
+  cv::Mat PreWarp::getTransform(float w, float h, 
           float rotationx, float rotationy, float rotationz, 
           float panX, float panY, float stretchX, float dist) {
 
