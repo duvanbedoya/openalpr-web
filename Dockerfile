@@ -6,7 +6,8 @@ RUN apt-get -y update && \
 
 ADD webservice /webservice
 
-ADD openalpr /storage/projects/alpr
+
+copy openalpr /storage/projects/alpr
 
 RUN cd /storage/projects/alpr/src && \
       mkdir build && \
